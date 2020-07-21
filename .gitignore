@@ -1,5 +1,10 @@
-/selenium**
+**/selenium**
+**/Zoho**
 .gitattributes
 .vscode
 *.log
 *.org*
+*.bak*
+*.*~
+*.code-workspace
+__pycache__
