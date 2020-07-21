@@ -1,0 +1,5 @@
+/selenium**
+.gitattributes
+.vscode
+*.log
+*.org*
