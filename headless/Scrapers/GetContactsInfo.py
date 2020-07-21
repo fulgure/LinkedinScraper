@@ -78,7 +78,7 @@ def SetupWebDriver() -> webdriver:
     return webdriver.Chrome(chrome_options=chrome_options)
 
 
-def GetEContactFromURL(driver: webdriver, url: str) -> EContact:
+def GetEContactFromURL(driver: webdriver.Chrome, url: str) -> EContact:
     """Returns a [EContact] from an url
 
     Args:
@@ -103,7 +103,7 @@ def GetEContactFromURL(driver: webdriver, url: str) -> EContact:
         return False
 
 
-def GetSkills(driver: webdriver) -> list:
+def GetSkills(driver: webdriver.Chrome) -> list:
     """Returns all the skills
 
     Args:
@@ -130,7 +130,7 @@ def stripNewlines(string: str) -> str:
     return string.replace("\r", "").replace("\n", "")
 
 
-def GetContactDescription(driver: webdriver) -> str or None:
+def GetContactDescription(driver: webdriver.Chrome) -> str or None:
     """Returns the text from a linkedin profile's about section
 
     Args:
@@ -145,7 +145,7 @@ def GetContactDescription(driver: webdriver) -> str or None:
         return None
 
 
-def LoadProfile(driver: webdriver, url: str) -> bool:
+def LoadProfile(driver: webdriver.Chrome, url: str) -> bool:
     """ Opens the specified LinkedIn profile, then moves around the page in order to load all the lazy-loaded content
     Args:
         driver (webdriver): The page's driver
@@ -158,10 +158,15 @@ def LoadProfile(driver: webdriver, url: str) -> bool:
                 (By.CLASS_NAME, selectors.PAGE_LOADED))
         )
     except:
-        if(driver.find_element(By.ID, "captcha-internal") != None):
+        try:
+            driver.find_element(By.ID, "captcha-internal")
             ctypes.windll.user32.MessageBoxW(
                 0, "Captcha détécté.\n L'éxécution de du script reprendra lorsque vous appuierez sur le bouton \"OK\".", "HELP", (0x30 | 0x40000))
-            return False
+
+        except:
+            ctypes.windll.user32.MessageBoxW(0, "Erreur inconnue", "Erreur", (0x30 | 0x40000))
+
+        return False
 
     LoadLazyLoadedBlocks(driver)
     ExpandAllText(driver)
@@ -189,7 +194,7 @@ def LoadLazyLoadedBlocks(driver: webdriver.Chrome) -> None:
             shouldLoop = False
 
 
-def ScrollToElem(driver: webdriver, el: WebElement) -> None:
+def ScrollToElem(driver: webdriver.Chrome, el: WebElement) -> None:
     """Scrolls the page to put the specified element in view
 
     Args:
@@ -199,7 +204,7 @@ def ScrollToElem(driver: webdriver, el: WebElement) -> None:
     driver.execute_script('arguments[0].scrollIntoView({block:"center"});', el)
 
 
-def GetContactName(driver: webdriver) -> tuple:
+def GetContactName(driver: webdriver.Chrome) -> tuple:
     """Returns a contact's first and last name from a linkedin profile, as a tuple(firstname,lastname)
 
     Args:
@@ -213,7 +218,7 @@ def GetContactName(driver: webdriver) -> tuple:
     return (fullName[0], fullName[1])
 
 
-def GetAllExperiences(driver: webdriver) -> list:
+def GetAllExperiences(driver: webdriver.Chrome) -> list:
     """Returns a list of EExperience, containing all the experiences in a linkedin profile
 
     Args:
@@ -249,7 +254,7 @@ def GetExpDescFromBlock(expBlock: WebElement) -> str or None:
         return None
 
 
-def ExpandAllText(driver: webdriver) -> None:
+def ExpandAllText(driver: webdriver.Chrome) -> None:
     """Clicks all the "See more" links on the page to load all the info
 
     Args:
@@ -384,7 +389,7 @@ def GetECompanyFromExperience(expBlock: WebElement) -> ECompany:
         expBlock (WebElement): The experience block
 
     Returns:
-        ECompany: The company as ECompany
+        ECompany: The company as an ECompany
     """
     try:
         compName: str = expBlock.find_element(
@@ -399,7 +404,7 @@ def GetECompanyFromExperience(expBlock: WebElement) -> ECompany:
     return ECompany(compName, compURL)
 
 
-def GetContactsToSearch(driver: webdriver, profilesToSkip: int = 0) -> list:
+def GetContactsToSearch(driver: webdriver.Chrome, profilesToSkip: int = 0) -> list:
     """Get the first [NB_CONTACTS_TO_GET] contacts to research
 
     Args:
@@ -424,9 +429,7 @@ def SaveEmployeesData(employees: EContact) -> None:
     data: str = jsonpickle.encode(employees)
     requests.post(
         consts.URL_SAVE_CONTACTS, {consts.ARGS_JSON: data})
-    print("Total contacts saved since script started running : " +
-          str(totalUpdatedContacts))
-    print("Total skipped contacts : " + str(profilesToSkip))
+    
 
 
 def lerp(valAsPercentage: float, min: int or float, max: int or float) -> float:
@@ -459,7 +462,13 @@ def JustifyNumber(number: int or float, requiredLength: int, decimalPlaces: int 
     Returns:
         str: The number, as a string, padded with leading zeroes
     """
-    numberAsStr:str = ("{:." + str(decimalPlaces) + "f}").format(number)
+    if(decimalPlaces == 0):
+        number = int(number)
+        formatStr = "{:}"
+    else:
+        formatStr = "{:.2f}"
+
+    numberAsStr:str = formatStr.format(number)
     if(decimalPlaces > requiredLength):
         print("JustifyNumber() : WARNING: decimalPlaces > requiredLength")
         requiredLength = requiredLength + decimalPlaces
@@ -470,6 +479,33 @@ def JustifyNumber(number: int or float, requiredLength: int, decimalPlaces: int 
 
     return numberAsStr.rjust(requiredLength, "0")
 
+def SleepWithLogging(time:int, MinJustifiedNumberLength = 2):
+    """Sleeps for a set amount of time and prints the time remaining every second
+
+    Args:
+        time (int or float): The time to sleep
+        MinJustifiedNumberLength (int, optional): The minimum size of each number (I.E with MinJustifiedNumberLength = 2, 1 will be printed as 01 ). Defaults to 2.
+    """
+    if(isinstance(time, float)):
+        time = int(time)
+    print(f"Sleeping for {time} seconds")
+
+    ttsLen = len(str(time))
+    if(ttsLen < MinJustifiedNumberLength):
+        ttsLen = MinJustifiedNumberLength
+
+    for i in range(floor(time)):
+        if(i % 10 == 0):
+            sys.stdout.write("\n")
+
+        sys.stdout.write(" " + str(JustifyNumber(time, ttsLen, 0)))
+        sleep(1)
+        time -= 1
+    print(" " + JustifyNumber(0, ttsLen, 0))
+    if(time > 0):
+        sleep(time)
+
+    print("\nDone sleeping")
 
 def SleepForRandomAmountOfTime(minSleep=consts.MIN_SLEEP_TIME, maxSleep=consts.MAX_SLEEP_TIME, log: bool=True) -> None:
     """Sleeps for a random amount of time
@@ -480,17 +516,21 @@ def SleepForRandomAmountOfTime(minSleep=consts.MIN_SLEEP_TIME, maxSleep=consts.M
         log (bool, optional): Should the function print to the console. Defaults to True.
     """
     timeToSleep: float = lerp(random.random(), minSleep, maxSleep)
+    if(log):
+        SleepWithLogging(timeToSleep)
+    else:
+        sleep(timeToSleep)
     # "{.2f}".format(float) returns the float as a string, with only 2 decimal points
-    print(f"Sleeping for {timeToSleep:.2f} seconds")
-    ttsLength: int = len(f"{timeToSleep:.2f}")
+    #print(f"Sleeping for {timeToSleep:.2f} seconds")
+    #ttsLength: int = len(f"{timeToSleep:.2f}")
 
-    for i in range(floor(timeToSleep)):
-        sys.stdout.write(" " + str(JustifyNumber(timeToSleep, ttsLength)))
-        sleep(1)
-        timeToSleep -= 1
-    sys.stdout.write(" " + str(JustifyNumber(timeToSleep, ttsLength)))
-    print("\nDone sleeping")
-    sleep(timeToSleep)
+    #for i in range(floor(timeToSleep)):
+    #    sys.stdout.write(" " + str(JustifyNumber(timeToSleep, ttsLength)))
+    #    sleep(1)
+    #    timeToSleep -= 1
+    #sys.stdout.write(" " + str(JustifyNumber(timeToSleep, ttsLength)))
+    #print("\nDone sleeping")
+    #sleep(timeToSleep)
 
 
 def ShowRecommendedPauseAlert() -> None:
@@ -499,27 +539,57 @@ def ShowRecommendedPauseAlert() -> None:
     time:datetime = datetime.now()
     ctypes.windll.user32.MessageBoxW(0,
         f"Le script a récupéré {consts.NB_CONTACTS_BEFORE_RECOMMENDED_PAUSE} contacts.\n"
-        + "Il est recommendé de faire une pause d'au moins 10 minutes afin d'éviter que le compte utilisé soit restreint\n"
+        + "Il est recommendé de faire une pause d'au moins 5 minutes afin d'éviter que le compte utilisé soit restreint\n"
         + "L'éxécution du script reprendra dès que cette boîte de dialogue sera fermée.\n"
-        + f"Message affiché à {str(time.hour).rjust(2)}:{str(time.minute).rjust(2)}.{str(time.second).rjust(2)}", "PAUSE RECOMMENDÉE",
+        + f"Message affiché à {JustifyNumber(time.hour, 2, 0)}:{JustifyNumber(time.minute, 2, 0)}.{JustifyNumber(time.second, 2, 0)}", "PAUSE RECOMMENDÉE",
         (0x30 | 0x40000))
 
-driver: webdriver = SetupWebDriver()
+def ShowSignInAlert() -> None:
+    """Pauses the execution and shows a message box telling the user to login
+    """
+    ctypes.windll.user32.MessageBoxW(0,
+    "Merci de vous connecter à LinkedIn.\n"
+    + "Fermez cette boîte de dialogue lorsque vous serez connecté pour que l'éxécution du script reprenne"
+    )
+
+def IsLoggedIn(driver: webdriver.Chrome) -> bool:
+    """Returns true if the user is currently logged to LinkedIn
+
+    Args:
+        driver (Webdriver): The page's driver
+
+    Returns:
+        bool: Returns true if the user is currently logged to LinkedIn
+    """
+    if("linkedin.com" not in driver.current_url):
+        driver.get("https://www.linkedin.com")
+
+    try:
+        driver.find_element(By.CLASS_NAME, selectors.SIGN_IN_BUTTON)
+        return True
+    except:
+        return False
+
+driver: webdriver.Chrome = SetupWebDriver()
 # Open linkedin's homepage in order to look less suspicious
-driver.get("https://www.linkedin.com")
+if not IsLoggedIn(driver):
+    driver.get("https://www.linkedin.com/login")
+    ShowSignInAlert()
+
 profilesToSkip: int = 0
-nbLoops: int = 0
-nbPauses: int = 0
-totalUpdatedContacts: int = 0
 contactsSinceLastRecommendedPause: int = 0
+totalContactsSaved: int = 0
 shouldLoop: bool = True
+
+#Main loop
 while shouldLoop:
-    nbPauses += 1
 
-    while nbLoops < (consts.MAX_LOOPS_PER_RUN * nbPauses):
+    nbLoops: int = 0
+    #Inner loop, the program sleeps when this loop is exited
+    while nbLoops < consts.MAX_LOOPS_PER_RUN:
         nbLoops += 1
-
         contacts: list = GetContactsToSearch(driver, profilesToSkip)
+
         if(len(contacts) == 0):
             shouldLoop = False
             break
@@ -527,8 +597,7 @@ while shouldLoop:
         result: list = list()
         for c in contacts:
             try:
-                contact = GetEContactFromURL(
-                    driver, c["linkedin"])
+                contact = GetEContactFromURL(driver, c["linkedin"])
                 SleepForRandomAmountOfTime()
                 if(contact == False):
                     continue
@@ -540,24 +609,19 @@ while shouldLoop:
                 profilesToSkip += 1
                 continue
 
+        contactsSinceLastRecommendedPause += len(result)
+        totalContactsSaved += len(result)
+        SaveEmployeesData(result)
+
+        print("Total contacts saved since script started running : " + str(totalContactsSaved))
+        print("Total skipped contacts : " + str(profilesToSkip))
+
         if(contactsSinceLastRecommendedPause > consts.NB_CONTACTS_BEFORE_RECOMMENDED_PAUSE):
             ShowRecommendedPauseAlert()
             contactsSinceLastRecommendedPause = 0
 
-        totalUpdatedContacts += len(result)
-        contactsSinceLastRecommendedPause += len(result)
-        SaveEmployeesData(result)
-
-    print("Sleeping for " + str(consts.SLEEP_TIME_BETWEEN_RUNS) + " seconds\n")
-    for i in reversed(range(consts.SLEEP_TIME_BETWEEN_RUNS)):
-        sys.stdout.write(str(i).rjust(
-            len(str(consts.SLEEP_TIME_BETWEEN_RUNS)), "0") + " ")
-
-        if(i % 10 == 0):
-            sys.stdout.write("\n")
-
-        sleep(1)
-    nbLoops = 0
+    if(shouldLoop):
+        SleepWithLogging(consts.SLEEP_TIME_BETWEEN_RUNS)
 
 
 print("DONE\n" * 3)
