@@ -36,11 +36,14 @@ class CONSTANTS
 class SOLR
 {
     public const FIELD_URL = "baseurl";
+    public const FIELD_IS_NEW = "isnew";
     public const IP = "127.0.0.1";
     public const PORT = "8983";
     public const SEARCH_ENDPOINT = "select";
-    public const CORE_NAME = "company";
+    public const CORE_NAME = "companies2";
     public const QUERY_FORMAT = "http://%s:%s/solr/%s/%s?q=";
+    public const DEFAULT_MINIMUM_WORD_LENGTH = 3;
+    public const FUZZY_SEARCH_MAX_DISTANCE = 2;
 }
 
 class AJAX_ARGS

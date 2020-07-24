@@ -185,7 +185,7 @@ function GetAllNamesFromCorrectCompanies($shouldSplit = true)
 function GetAllNonMatchedCompanies()
 {
 	$sql = "SELECT id, BaseURL FROM " . CONSTANTS::NON_MATCHED_VIEW_NAME . " WHERE id <> ".CONSTANTS::UNASSIGNED_COMPANY_ID;
-	$sql .= " AND id <> ".CONSTANTS::UNEMPLOYED_COMPANY_ID." AND hasnomatch = 0 LIMIT 100";
+	$sql .= " AND id <> ".CONSTANTS::UNEMPLOYED_COMPANY_ID." AND hasnomatch = 0";
 	$conn = EDatabase::prepare($sql);
 	$conn->execute();
 	$results = $conn->fetchAll();
