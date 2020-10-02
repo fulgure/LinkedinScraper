@@ -8,12 +8,12 @@
  */
 function GetCompanyIDFromURL($url)
 {
-    $sql = "SELECT `ID` FROM `company` WHERE `BaseURL` = :u";
-    $conn = EDatabase::prepare($sql);
-    $conn->execute(["u" => $url]);
-    if ($conn->rowCount() <= 0)
-        return false;
-    return $conn->fetch()["ID"];
+	$sql = "SELECT `ID` FROM `company` WHERE `BaseURL` LIKE :u";
+	$conn = EDatabase::prepare($sql);
+	$conn->execute(["u" => urldecode($url)]);
+	if ($conn->rowCount() <= 0)
+		return false;
+	return $conn->fetch()["ID"];
 }
 
 /**
@@ -26,14 +26,14 @@ function GetCompanyIDFromURL($url)
  */
 function URLEncodeSpecialChars($url)
 {
-    static $charsToEncode = [
-        "ô", "é", "è", "&", "ü", "–", "â"
-    ];
-    foreach ($charsToEncode as $letter) {
-        if (strpos($url, $letter) !== -1)
-            $url = str_replace($letter, urlencode($letter), $url);
-    }
-    return $url;
+	static $charsToEncode = [
+		"ô", "é", "è", "&", "ü", "–", "â"
+	];
+	foreach ($charsToEncode as $letter) {
+		if (strpos($url, $letter) !== -1)
+			$url = str_replace($letter, urlencode($letter), $url);
+	}
+	return $url;
 }
 
 /**
@@ -44,37 +44,37 @@ function URLEncodeSpecialChars($url)
  */
 function GetInfoFromAllCompanies($sheetNum = 0)
 {
-    /**
+	/**
 	 * La base de donnée du site et celle de Zoho ne correspondent pas à 100%, car des entreprises sont régulièrement ajoutées à Zoho
 	 * Pour contrer cela, on affiche 20% de résultats de plus (10% de résultats avant, et 10% après) que les 100 par pages de zoho
 	 */
-    $offset = ($sheetNum * CONSTANTS::ZOHO_RESULTS_PER_SHEET) * 0.9;
-    $limit = CONSTANTS::ZOHO_RESULTS_PER_SHEET * 1.1;
-    $sql = "SELECT c.ID, c.BaseURL, ci.Name, ci.`Website`, ci.`Phone`, ci.`NbEmployees`, ci.`Industry`, ci.`Description`, ci.`Type`, ci.`FoundedYear`, ci.`Specialties` FROM `company` as c, `companyinfo` as ci WHERE c.ID = ci.`CompanyID` ORDER BY c.BaseURL asc";
-    $sql .= " LIMIT ". $limit ." OFFSET " . $offset;
-    $conn = EDatabase::prepare($sql);
-    $conn->execute();
-    $queryResult = $conn->fetchAll();
-    $result = array();
-    foreach ($queryResult as $row) {
-        $comp = new ECompany($row['ID']);
-        $comp->linkedIn = $row['BaseURL'];
-        $comp->name = $row['Name'];
-        $comp->website = $row['Website'];
-        if ($row['Phone'] === 'None')
-            $comp->phone = '';
-        else {
-            $comp->phone = $row['Phone'];
-        }
-        $comp->nbEmployees = $row['NbEmployees'];
-        $comp->industry = $row['Industry'];
-        $comp->desc = $row['Description'];
-        $comp->type = $row['Type'];
-        $comp->year = $row['FoundedYear'];
-        $comp->specialties = $row['Specialties'];
-        array_push($result, $comp);
-    }
-    return $result;
+	$offset = ($sheetNum * CONSTANTS::ZOHO_RESULTS_PER_SHEET) * 0.9;
+	$limit = CONSTANTS::ZOHO_RESULTS_PER_SHEET * 1.1;
+	$sql = "SELECT c.ID, c.BaseURL, ci.Name, ci.`Website`, ci.`Phone`, ci.`NbEmployees`, ci.`Industry`, ci.`Description`, ci.`Type`, ci.`FoundedYear`, ci.`Specialties` FROM `company` as c, `companyinfo` as ci WHERE c.ID = ci.`CompanyID` ORDER BY c.BaseURL asc";
+	$sql .= " LIMIT " . $limit . " OFFSET " . $offset;
+	$conn = EDatabase::prepare($sql);
+	$conn->execute();
+	$queryResult = $conn->fetchAll();
+	$result = array();
+	foreach ($queryResult as $row) {
+		$comp = new ECompany($row['ID']);
+		$comp->linkedIn = $row['BaseURL'];
+		$comp->name = $row['Name'];
+		$comp->website = $row['Website'];
+		if ($row['Phone'] === 'None')
+			$comp->phone = '';
+		else {
+			$comp->phone = $row['Phone'];
+		}
+		$comp->nbEmployees = $row['NbEmployees'];
+		$comp->industry = $row['Industry'];
+		$comp->desc = $row['Description'];
+		$comp->type = $row['Type'];
+		$comp->year = $row['FoundedYear'];
+		$comp->specialties = $row['Specialties'];
+		array_push($result, $comp);
+	}
+	return $result;
 }
 
 
@@ -124,7 +124,7 @@ function GetClosestMatchingCompaniesFromList($comp, $list)
 					$w = $globalWord[1];
 				else
 					$w = $globalWord;
-                $diff = similar_text($word, $w, $matchPercentage);
+				$diff = similar_text($word, $w, $matchPercentage);
 				array_push($result, ["perc" => $matchPercentage, "fixedName" => $globalWord, "badName" => [$word, $comp->FullName, $comp->id]]);
 			}
 		}
@@ -165,14 +165,19 @@ function SortByDiffInArrayTuple($a, $b)
  */
 function GetAllNamesFromCorrectCompanies($shouldSplit = true)
 {
-	$sql = "SELECT id, BaseURL FROM company WHERE isNew = 0 AND id <> ".CONSTANTS::UNASSIGNED_COMPANY_ID." AND id <> ".CONSTANTS::UNEMPLOYED_COMPANY_ID;
+	$sql = "SELECT id, BaseURL FROM company WHERE LENGTH(zohoid) > 0 AND id <> " . CONSTANTS::UNASSIGNED_COMPANY_ID . " AND id <> " . CONSTANTS::UNEMPLOYED_COMPANY_ID;
 	$conn = EDatabase::prepare($sql);
 	$conn->execute();
 	$queryResult = $conn->fetchAll();
 	$result = [];
 	for ($i = 0; $i < count($queryResult); $i++) {
 		$result[$i]["id"] = $queryResult[$i]["id"];
-		$result[$i]["word"] = explode('/', $queryResult[$i]["BaseURL"])[4];
+		$splitURL = explode('/', $queryResult[$i]["BaseURL"]);
+		if (array_key_exists(4, $splitURL))
+			$result[$i]["word"] = urldecode(explode('/', $queryResult[$i]["BaseURL"])[4]);
+		else
+			$result[$i]["word"] = urldecode($queryResult[$i]["BaseURL"]);
+		
 	}
 	return ($shouldSplit) ? EPotentialURL::filterNames($result, false) : $result;
 }
@@ -184,14 +189,14 @@ function GetAllNamesFromCorrectCompanies($shouldSplit = true)
  */
 function GetAllNonMatchedCompanies()
 {
-	$sql = "SELECT id, BaseURL FROM " . CONSTANTS::NON_MATCHED_VIEW_NAME . " WHERE id <> ".CONSTANTS::UNASSIGNED_COMPANY_ID;
-	$sql .= " AND id <> ".CONSTANTS::UNEMPLOYED_COMPANY_ID." AND hasnomatch = 0";
+	$sql = "SELECT id, BaseURL FROM " . CONSTANTS::NON_MATCHED_VIEW_NAME . " WHERE id <> " . CONSTANTS::UNASSIGNED_COMPANY_ID;
+	$sql .= " AND id <> " . CONSTANTS::UNEMPLOYED_COMPANY_ID . " AND hasnomatch = 0";
 	$conn = EDatabase::prepare($sql);
 	$conn->execute();
 	$results = $conn->fetchAll();
 	$result = [];
 	foreach ($results as $url) {
-		if(strpos($url["BaseURL"], "=") !== false)
+		if (strpos($url["BaseURL"], "=") !== false)
 			$u = explode("=", $url["BaseURL"])[1];
 		else
 			$u = explode("/", $url["BaseURL"])[4];
@@ -200,4 +205,3 @@ function GetAllNonMatchedCompanies()
 	}
 	return $result;
 }
-

@@ -21,11 +21,12 @@ class EPotentialURL
     /**
      * List of common words in company names (SA, limited, etc...)
      * We filter these words out, because using those to match companies would give a lot of false positives
-     *
+     * All strings should be lowercase
+     * 
      * @var array
      */
     static public $COMMON_WORDS = [
-        "international", "sa", "gmbh", "limited", "versicherungen", "switzerland", "régie", "groupe", "group", "ag", "co", "ltd", "ville", "group", "service", "services", "bank", "banque", "suisse", "Switzerland", "(Switzerland)", "company", "SAS"
+        "international","internationale", "sa", "gmbh", "limited", "versicherungen", "switzerland", "régie", "groupe", "group", "ag", "co", "ltd", "ville", "group", "service", "services", "bank", "banque", "suisse", "management", "(switzerland)", "company", "sas"
     ];
 
     /**

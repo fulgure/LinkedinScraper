@@ -6,17 +6,19 @@ header('Content-type: application/json');
 header('Access-Control-Allow-Origin: *');
 require_once "..\\includeAll.php";
 $result = [];
-if (
-    isset($_GET['linkedin'])) {
-    $linkedin = URLEncodeSpecialChars(filter_input(INPUT_GET, 'linkedin'));
-    $website = filter_input(INPUT_GET, 'website');
-    $phone = filter_input(INPUT_GET, 'phone');
-    $nbEmployees = filter_input(INPUT_GET, 'nbEmployees');
-    $industry = filter_input(INPUT_GET, 'industry');
-    $desc = filter_input(INPUT_GET, 'desc');
-    $type = filter_input(INPUT_GET, 'type');
-    $year = filter_input(INPUT_GET, 'year');
-    $spec = filter_input(INPUT_GET, 'spec');
+if(isset($_POST['json'])){
+    $comp = json_decode(filter_input(INPUT_POST, 'json'));
+}
+if (isset($comp->linkedin)) {
+    $linkedin = URLEncodeSpecialChars($comp->linkedin);
+    $website = $comp->website;
+    $phone = $comp->phone;
+    $nbEmployees = $comp->nbEmployees;
+    $industry = $comp->industry;
+    $desc = $comp->desc;
+    $type = $comp->compType;
+    $year = $comp->year;
+    $spec = $comp->spec;
 
     $id = GetCompanyIDFromURL($linkedin);
     if($industry !== "None")
@@ -39,9 +41,11 @@ if (
         $result["ReturnCode"] = 1;
     } else {
         $result["ReturnCode"] = 0;
+        $result["message"] = "ID is undefined";
     }
 } else {
     $result["ReturnCode"] = 0;
+    $result["message"] = var_dump($_POST);
 }
 echo json_encode($result);
 die();

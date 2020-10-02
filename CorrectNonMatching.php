@@ -34,11 +34,14 @@ foreach ($filteredComps as $comp) {
 	<?php
 	$cnt = 0;
 	foreach ($matchingCompanies as $match) {
+		$title = urldecode($match[0]["badName"][1]);
+		$id = urldecode($match[0]["badName"][2]);
 	?>
 		<div id="<?= $cnt ?>" class="comp" style="display:none;text-align:center;">
-			<h3 class="<?= $cnt ?> name" id="<?= urldecode($match[0]["badName"][2]) ?>" style="color:red;display:hidden">
+			<h3 class="<?= $cnt ?> name" id="<?= $id ?>" style="color:red;display:hidden">
 				<span id="num" class="<?= $cnt ?>"><?= $cnt + 1 ?>.</span>
 				<span id="title" class="<?= $cnt ?>"><?= urldecode($match[0]["badName"][1]) ?></span>
+				<span id="id" class="<?=$cnt?>"> (<?=$id?>)</span>
 			</h3>
 			<?php
 			if ($match !== null) {
@@ -55,6 +58,8 @@ foreach ($filteredComps as $comp) {
 	<div style="text-align:center;">
 		<button class="unassign" style="color:red;font-size:16pt;margin-right:3%" onclick="SetUnassigned()">UNASSIGN</button>
 		<button class="unemploy" style="color:red;font-size:16pt;" onclick="SetUnemployed()">UNEMPLOYED</button>
+		<br>
+		<button class="manual" style="color:red;font-size:16pt;margin-top:2%" onclick="SetIdManually()">ENTER ID</button>
 		<br>
 		<br>
 	</div>
@@ -81,10 +86,26 @@ foreach ($filteredComps as $comp) {
 	</div>
 	<script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
 	<script>
-		const AUTO_SOLR_SEARCH = true;
+
+		const AUTO_SEARCH = true;
 		const NB_COMPANIES = <?= count($matchingCompanies) ?>;
 		const DEFAULT_MINIMUM_WORD_LENGTH = 3;
 		const TITLE_SELECTOR = "%s";
+		const FIX_LINKEDIN = "ajax/FixLinkedin.php";
+		const DB_SEARCH = "ajax/SearchCompanyByName.php";
+
+		const KEYS = {
+			LEFT: 37,
+			UP: 38,
+			RIGHT: 39,
+			DOWN: 40,
+		};
+
+		const FIXES = {
+			CHANGE_ID: 0,
+			UNEMPLOY: 1,
+			UNASSIGN: 2
+		};
 
 		var currentNumber;
 		var searchBar;
@@ -92,6 +113,7 @@ foreach ($filteredComps as $comp) {
 		var currPage;
 		var searchTerms;
 
+		var isTyping = false;
 		var currTerms = '';
 		var eventCalledByUser = false;
 
@@ -103,19 +125,84 @@ foreach ($filteredComps as $comp) {
 			currPage = $('#currPage');
 			searchTerms = $('#searchTerms');
 
-			addClickHandlerToButtons();
+			AddClickHandlerToButtons();
 			searchBar.off('keyup').on("keyup", function() {
 				eventCalledByUser = true;
-				SolrSearch($(this).val(), ParseSearchResult);
+				DBSearch($(this).val(), ParseDBSearch)
+				SolrSearch($(this).val(), ParseSOLRSearch);
 			})
-			currTerms = splitCompanyName(getCurrentTitle());
-			addSearchTerms(currTerms);
-			if (AUTO_SOLR_SEARCH)
+			searchBar.on('focus', () => isTyping = true).on('blur', () => isTyping = false);
+			currTerms = SplitCompanyName(GetCurrentTitle());
+			AddSearchTerms(currTerms);
+			if (AUTO_SEARCH){
 				SolrSearchCurrentOption();
+
+			}
+			BindKeysToUI();
 			RefreshUI();
 		});
 
-		function getCurrentTitle() {
+		/**
+		 * Binds the UI to keyboard keys
+		 *
+		 * @return void
+		 */
+		function BindKeysToUI(){
+			$(document).on("keyup", HandleKeyPress);
+		}
+
+		/**
+		 * Handles key presses on the document
+		 */
+		function HandleKeyPress(event){
+			if(IsKeyBound(event.keyCode)){
+				switch(event.keyCode){
+					case KEYS.LEFT:
+						ChangeCompanyToMatch(-1);
+						break;
+					case KEYS.RIGHT:
+						ChangeCompanyToMatch(1);
+						break;
+				}
+			}else if(!isTyping && IsNumber(event.key)){
+				//If the user presses 1, we want to simulate a click on the button that's at position 0 (I.E the first button)
+				let val = Number(event.key) - 1;
+				/* Disabled because it's easy to misclick */
+				//$('.current .possibility').eq(val).click();
+			}
+		}
+
+		/**
+		 * Returns true if the character is a number
+		 * 
+		 * @return bool
+		 */
+		function IsNumber(char){
+			let key = Number(char);
+			
+			if(key === 0 || isNaN(key) || char === null ||char === ' ')
+				return false;
+
+			return true;
+		}
+
+		/**
+		 * Returns true if the selected key is bound to the UI
+		 */
+		function IsKeyBound(keyCode){
+			for(let key in KEYS){
+				if(KEYS[key] === keyCode)
+					return true;
+			}
+			return false;
+		}
+
+		/**
+		 * Returns the current company's title
+		 *
+		 * @return string
+		 */
+		function GetCurrentTitle() {
 			return $('span#title.' + currentNumber).text();
 		}
 
@@ -123,14 +210,17 @@ foreach ($filteredComps as $comp) {
 			if (Array.isArray(text))
 				text = text.join(' ');
 
-			if (text.length >= 3) {
+			/*if (text.length >= 3) {
 				$.get("ajax/SolrWrapper.php", {
 					query: text
 				}, callback);
-			}
+			}*/
 		}
 
-		function splitCompanyName(name, minWordLength = DEFAULT_MINIMUM_WORD_LENGTH) {
+		/**
+		 * Splits a company name
+		 */
+		function SplitCompanyName(name, minWordLength = DEFAULT_MINIMUM_WORD_LENGTH) {
 			name = name.replace(/-/g, ' ');
 			nameParts = name.split(' ');
 			result = [];
@@ -142,15 +232,22 @@ foreach ($filteredComps as $comp) {
 			return result;
 		}
 
-		function addClickHandlerToButtons() {
+		/**
+		 * Adds a click handler to the possibility buttons
+		 *
+		 * @return void
+		 */
+		function AddClickHandlerToButtons() {
 			$(".possibility").off('click').on("click", function() {
-				var badID = $("h3." + currentNumber).attr("id");
 				var goodID = $(this).attr("id");
-				SubmitChange(badID, goodID);
+				SubmitChange(GetCurrentBadID(), goodID);
 			});
 		}
 
-		function ParseSearchResult(data) {
+		/**
+		 * Parses the search results, and updates the UI
+		 */
+		function ParseSOLRSearch(data) {
 			if (data.code > 0) {
 				$('.searchResult').remove();
 				var results = JSON.parse(data.data);
@@ -160,14 +257,14 @@ foreach ($filteredComps as $comp) {
 				if (results.response.docs.length > 0) {
 					$('.notFound').hide();
 					results.response.docs.forEach(function(val, i) {
-						addPossibilityButton(val.id, val.baseurl);
+						AddPossibilityButton(val.id, val.baseurl, 'solr');
 					})
-					addClickHandlerToButtons();
+					AddClickHandlerToButtons();
 				} else {
 					$('.notFound').show();
 				}
 			}
-			newTerms = splitCompanyName(searchBar.val());
+			newTerms = SplitCompanyName(searchBar.val());
 			isEqual = true;
 			if(currTerms.length !== newTerms.length)
 				isEqual = false;
@@ -176,46 +273,109 @@ foreach ($filteredComps as $comp) {
 			}
 			if(!isEqual){
 				currTerms = newTerms;
-				removeAllSearchTerms();
-				addSearchTerms(currTerms);
+				RemoveAllSearchTerms();
+				AddSearchTerms(currTerms);
 			}
 			RefreshUI();
 			eventCalledByUser = false;
 		}
 
-		function removeAllSearchTerms() {
+		function ParseDBSearch(data) {
+			if (data.code > 0) {
+				$('.searchResult').remove();
+				if(data.data.length > 0){
+
+					$('.notFound').hide();
+					data.data.forEach(function(val){
+						AddPossibilityButton(val[0], val[1], 'db');
+					});
+					AddClickHandlerToButtons();
+				} else {
+					$('.notFound').show();
+				}
+			}
+			newTerms = SplitCompanyName(searchBar.val());
+			isEqual = true;
+			if(currTerms.length !== newTerms.length)
+				isEqual = false;
+			else{
+				currTerms.forEach((val, i) => isEqual &= (val == newTerms[i]))
+			}
+			if(!isEqual){
+				currTerms = newTerms;
+				RemoveAllSearchTerms();
+				AddSearchTerms(currTerms);
+			}
+			RefreshUI();
+			eventCalledByUser = false;
+		}
+
+		/**
+		 * Removes all search terms
+		 *
+		 * @return void
+		 */
+		function RemoveAllSearchTerms() {
 			$('.searchTerm').remove();
 		}
 
-		function toggleButtonAndSearch(btn) {
+		/**
+		 * Toggles the enabled class on a button
+		 */
+		function ToggleButtonAndSearch(btn) {
 			$(btn).toggleClass('enabled');
-			SolrSearch(getSearchTerms(), ParseSearchResult);
+			SolrSearch(GetSearchTerms(), ParseSOLRSearch);
+		}
+		
+		/**
+		 * Adds buttons for the search terms
+		 */
+		function AddSearchTerms(terms) {
+			terms.forEach(el => AddSearchTermButton(el));
 		}
 
-		function addSearchTerms(terms) {
-			terms.forEach(el => addSearchTermButton(el));
-		}
-
-		function getSearchTerms() {
+		/**
+		 * Returns all the search terms
+		 *
+		 * @return void
+		 */
+		function GetSearchTerms() {
 			result = '';
 			$('.searchTerm.enabled').each(function(i) {
 				result += $(this).text() + ' ';
 			});
 			return result;
 		}
-
-		function addSearchTermButton(val) {
+		/**
+		 * Adds a search term button with text that's equal to the val parameter
+		 */
+		function AddSearchTermButton(val) {
 			searchTerms.append(`
-			<button class="searchTerm enabled" style="color:red;font-size:16pt;" onclick="toggleButtonAndSearch(this)">${val}</button>
+			<button class="searchTerm enabled" style="color:red;font-size:16pt;" onclick="ToggleButtonAndSearch(this)">${val}</button>
 			`);
 		}
 
-		function addPossibilityButton(id, url) {
+		function DBSearch(text, callback = ParseSOLRSearch){
+			$.get({
+				url: DB_SEARCH,
+				data: {<?=AJAX_ARGS::COMPANY_NAME?>:text},
+				success: callback
+			});
+		}
+
+		/**
+		 * Adds a possibility button with a set id and url
+		 */
+		function AddPossibilityButton(id, url, classes = '') {
 			searchResults.append(`
-			<button style="color:green;font-size:12pt;margin:0.3% 0% 0.3% 0%" id="${id}" class="searchResult possibility" value="${url}">${url} (${id})</button>
+			<button style="color:green;font-size:12pt;margin:0.3% 0% 0.3% 0%" id="${id}" class="searchResult possibility ${classes}" value="${url}">${url} (${id})</button>
 			`);
 		}
 
+		/**
+		 * Submits changes
+		 */
+		/*
 		function SubmitChange(badID, goodID, shouldUnassign = false) {
 			data = {
 				"brokenID": badID,
@@ -223,6 +383,7 @@ foreach ($filteredComps as $comp) {
 			};
 			if (shouldUnassign)
 				data.unassign = true;
+
 			$.get("ajax/FixLinkedin.php", data, function(data) {
 				if (data.Code > 0) {
 					ChangeCompanyToMatch(1, false);
@@ -230,8 +391,21 @@ foreach ($filteredComps as $comp) {
 					alert("Error making the request");
 				}
 			});
+		}*/
+
+		function HandleFixLinkedinSuccess(data){
+			if (data.Code > 0) {
+					ChangeCompanyToMatch(1, false);
+				} else {
+					alert("Error making the request");
+				}
 		}
 
+		/**
+		 * Jumps to the company at the index indicated by the UI
+		 *
+		 * @return void
+		 */
 		function JumpToCompany() {
 			newVal = parseInt(currPage.val()) - 1;
 			if (newVal >= 0) {
@@ -247,7 +421,7 @@ foreach ($filteredComps as $comp) {
 		RelativePosition = 1 : Montre la prochaine entreprise dans la liste
 		RelativePosition = -1 : Montre l'entreprise précédente dans la liste
 		**/
-		function ChangeCompanyToMatch(newRelativePosition, checkForDuplicates = true) {
+		function ChangeCompanyToMatch(newRelativePosition, checkForDuplicates = false) {
 			if (newRelativePosition == 0)
 				return;
 			else if (newRelativePosition > 0) {
@@ -257,7 +431,7 @@ foreach ($filteredComps as $comp) {
 				direction = BACKWARD;
 				incrementVal = -1;
 			}
-			oldComp = getCurrentTitle();
+			oldComp = GetCurrentTitle();
 			/* currentNumber commence à 0, alors que NB_COMPANIES commence à 1 */
 			if (direction = FORWARD && currentNumber + newRelativePosition >= NB_COMPANIES)
 				currentNumber = NB_COMPANIES - 1;
@@ -273,7 +447,7 @@ foreach ($filteredComps as $comp) {
 				firstLoop = true;
 				while (shouldSkip) {
 					currentNumber += incrementVal;
-					newComp = getCurrentTitle();
+					newComp = GetCurrentTitle();
 					if (newComp !== oldComp || currentNumber == 0 || currentNumber >= NB_COMPANIES) {
 						shouldSkip = false;
 						if (firstLoop)
@@ -284,14 +458,19 @@ foreach ($filteredComps as $comp) {
 				}
 			}
 
-			compName = getCurrentTitle();
-			currTerms = splitCompanyName(compName)
-			removeAllSearchTerms();
+			compName = GetCurrentTitle();
+			currTerms = SplitCompanyName(compName)
+			RemoveAllSearchTerms();
 			SolrSearchCurrentOption();
-			addSearchTerms(currTerms)
+			AddSearchTerms(currTerms)
 			RefreshUI();
 		}
 
+		/**
+		 * Refreshes the UI
+		 *
+		 * @return void
+		 */
 		function RefreshUI() {
 			currPage.prop('value', currentNumber + 1);
 			if (currTerms.length > 0 && !eventCalledByUser)
@@ -301,22 +480,68 @@ foreach ($filteredComps as $comp) {
 			console.log(currentNumber);
 		}
 
-
+		/**
+		 * Searchs the current option on Solr
+		 *
+		 * @return void
+		 */
 		function SolrSearchCurrentOption() {
-			SolrSearch(currTerms, ParseSearchResult);
+			SolrSearch(currTerms, ParseSOLRSearch);
 		}
 
 		const UNEMPLOYED_ID = <?= CONSTANTS::UNEMPLOYED_COMPANY_ID ?>;
 		const UNASSIGNED_ID = <?= CONSTANTS::UNASSIGNED_COMPANY_ID ?>;
 
-		function SetUnemployed() {
-			var badID = $("h3." + currentNumber).attr("id");
-			SubmitChange(badID, UNEMPLOYED_ID);
+		/**
+		 * Changes the company id of all experiences that have badID to goodID
+		 */
+		function SubmitChange(badID, goodID) {
+			data = {
+				brokenID: badID,
+				correctID: goodID
+			};
+			CallFixLinkedin(data);
 		}
 
-		function SetUnassigned() {
-			var badID = $("h3." + currentNumber).attr("id");
-			SubmitChange(badID, UNASSIGNED_ID, true);
+		/**
+		 * Calls the page to match a company with Zoho
+		 */
+		function CallFixLinkedin(data, callback = HandleFixLinkedinSuccess){
+			$.get(FIX_LINKEDIN, data, HandleFixLinkedinSuccess);
 		}
+
+		/**
+		 * Sets the current company to unemployed
+		 *
+		 * @return void
+		 */
+		function SetUnemployed() {
+			CallFixLinkedin({brokenID: GetCurrentBadID(), correctID:UNEMPLOYED_ID});
+		}
+
+		function GetCurrentBadID(){
+			return badID = $("h3." + currentNumber).attr("id");
+		}
+
+		/**
+		 * Sets the current company to unassigned
+		 *
+		 * @return void
+		 */
+		function SetUnassigned() {
+			CallFixLinkedin({brokenID: GetCurrentBadID(), <?=AJAX_ARGS::SHOULD_UNASSIGN?>: true});
+		}
+
+		function SetIdManually(){
+			var goodID = prompt("Enter the correct ID");
+			
+			if(goodID.length > 0){
+				CallFixLinkedin({brokenID: GetCurrentBadID(), correctID: goodID});
+			}
+			else{
+				alert("Incorrect ID");
+			}
+		}
+
 	</script>
 </body>

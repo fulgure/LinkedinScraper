@@ -5,13 +5,13 @@ from selenium.webdriver.support import expected_conditions as EC
 from urllib.parse import urlparse
 import json
 import re
+import requests
+import jsonpickle
 
 # Récupère le lien du profil LinkedIn de toutes les entreprises à scrapper
 def GetAllCompaniesToSearch(driver):
-    driver.get(
-        "view-source:http://127.0.0.1/LinkedInScraper/ajax/GetAllCompaniesToSearch.php")
-    text = driver.find_element(By.CLASS_NAME, "line-content").text
-    allURLs = json.loads(text)
+    request: requests.Response = requests.get("http://127.0.0.1/LinkedInScraper/ajax/GetAllCompaniesToSearch.php")
+    allURLs = json.loads(request.text)
     return allURLs
 
 # Formatte l'url de façon à ce qu'elle pointe à la page "À propos"
@@ -26,7 +26,7 @@ def SetupLinkedinCookies(driver):
     driver.get("http://www.linkedin.com")
     driver.add_cookie({
         "name": "li_at",
-        "value": "AQEDAS918EkBZSs_AAABcsLDzJQAAAFy5tBQlE0AqzzDyfht__dd-GngGBm95tZjALPVd74mY4SdLdKiTdPv8yhwq-zFKeEz8a7jo2I9QPc_fr3Mt6mj_AQlvxfQ8hxdv_bRgIu8gkLQfQpzU4jG09LA"
+        "value": "AQEDAS918EkFQdfBAAABc3rYJU8AAAF0ufblKk0AOzgbhvFbAqxOisgkpzu-nJA19YF5oZ5KN993SJdQIbceEdPawXXqQxLF-gM6cVTGPbqMZe6l_KrOpG7w7XbMXObG5LlKq3je7vgoztpz-xTj4mf8"
     })
 
 # Prend une liste de WebElement, et retourne une liste contenant le texte de chaque élément
@@ -39,10 +39,12 @@ def GetAllTextFromWebElementList(elements):
 
 # Le sélécteur CSS de la section contenant les infos de l'entreprise
 SECTION_CSS_SELECTOR = ".org-grid__core-rail--no-margin-left > section[id^=ember]"
-# Le sélécteur CSS lorsque l'entreprise ne possède pas de description
+# Le sélécteur CSS lorsque l'entreprise ne possède pas de desc
 INFO_CSS_SELECTOR = ".org-grid__core-rail--wide section"
 # Prend un lien linkedin, et retourne les informations de l'entreprise associée
-def GetDataFromURL(driver, url):
+def GetDataFromURL(driver, url: str):
+    if "linkedin.com/in/" in url:
+        return None
     result = Company(url)
     url = FormatURL(url)
     driver.get(url)
@@ -50,7 +52,7 @@ def GetDataFromURL(driver, url):
     #   Data layout
     #   Section
     #       h4 -> "Présentation"
-    #       p -> description
+    #       p -> desc
     #
     #       dl -> other infos
     #           dt -> header
@@ -61,7 +63,7 @@ def GetDataFromURL(driver, url):
             EC.presence_of_element_located(
                 (By.CSS_SELECTOR, SECTION_CSS_SELECTOR))
         )
-        result.Description = infosPanel.find_element(By.TAG_NAME, "p").text
+        result.desc = infosPanel.find_element(By.TAG_NAME, "p").text
     except:
                 infosPanel = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located(
@@ -93,11 +95,11 @@ def GetDataFromURL(driver, url):
     for cat in remainingCategories:
         data:dict = dictionary[cat]
         if(cat.startswith("Site")):
-            result.Website = data
+            result.website = data
         elif(cat == "Téléphone"):
-            result.Tel = data
+            result.phone = data
         elif(cat == "Secteur"):
-            result.Industry = data
+            result.industry = data
         elif(cat.startswith("Taille")):
             # /!\ Ce n'est pas un espace entre 10 et 000 mais un demi-espace (" " vs " ") /!\
             if(" " in data):
@@ -116,35 +118,35 @@ def GetDataFromURL(driver, url):
                 upperBoundStartIndex = data.index('-') + 1
                 upperBoundStopIndex = data.index(' ')
                 data = data[upperBoundStartIndex:upperBoundStopIndex]
-            result.Size = data
+            result.nbEmployees = data
         elif(cat == "Type"):
-            result.CompType = data
+            result.compType = data
         elif(cat == "Fondée en"):
-            result.CreatedDate = data
+            result.year = data
         elif(cat == "Spécialisations"):
-            result.Specialty = data
+            result.spec = data
     return result
 
 # Structure de donnée contenant les champs de la base de donnée
 class Company:
-    LinkedInURL = None
-    Description = None
-    Website = None
-    Tel = None
-    Industry = None
-    Size = 0
-    CompType = None
-    CreatedDate = 0
-    Specialty = None
+    linkedin = None
+    desc = None
+    website = None
+    phone = None
+    industry = None
+    nbEmployees = 0
+    compType = None
+    year = 0
+    spec = None
 
-    def __init__(self, LinkedInURL):
-        self.LinkedInURL = LinkedInURL
+    def __init__(self, linkedin):
+        self.linkedin = linkedin
 
 # Insère un {Company} en base de donnée
-def SaveDataInDB(driver, data):
+def SaveDataInDB(driver, data:Company):
     baseURL = "http://127.0.0.1/LinkedInScraper/ajax/SaveCompanyInfo.php"
-    fullURL = f"{baseURL}?linkedin={data.LinkedInURL}&website={data.Website}&phone={data.Tel}&nbEmployees={data.Size}&industry={data.Industry}&desc={data.Description}&type={data.CompType}&year={data.CreatedDate}&spec={data.Specialty}"
-    driver.get(fullURL)
+    encodedData:str = jsonpickle.encode(data)
+    print(requests.post(baseURL, {'json':encodedData}).text)
 
 
 driver = webdriver.Chrome()
@@ -153,7 +155,10 @@ companies = list()
 SetupLinkedinCookies(driver)
 for u in URLs:
     data = GetDataFromURL(driver, u)
+    if data == None:
+        continue
+
     if(len(list(vars(data).keys())) >= 2):
         SaveDataInDB(driver, data)
     else:
-        print(f"{data.Website};{data.Tel};{data.Industry};{data.Size};{data.CompType};{data.CreatedDate};{data.Specialty}")
+        print(f"{data.website};{data.phone};{data.industry};{data.nbEmployees};{data.compType};{data.year};{data.spec}")

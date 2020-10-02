@@ -12,6 +12,7 @@ if (isset($_GET[AJAX_ARGS::SHOULD_UNASSIGN]))
     $unassign = (filter_input(INPUT_GET, AJAX_ARGS::SHOULD_UNASSIGN) == "true");
 else
     $unassign = false;
+    
 
 if (isset($_GET[AJAX_ARGS::BROKEN_ID]))
     $brokenID = filter_input(INPUT_GET, AJAX_ARGS::BROKEN_ID);
